@@ -4,14 +4,14 @@
         {
             "email": "ben@ben.cm",
             "github": "Bencodes",
-            "name": "Ben Lee",
-            "github_user_id": 2177687
+            "github_user_id": 2177687,
+            "name": "Ben Lee"
         },
         {
             "email": "ceo@artemzin.com",
             "github": "artem-zinnatullin",
-            "name": "Artem Zinnatullin",
-            "github_user_id": 967132
+            "github_user_id": 967132,
+            "name": "Artem Zinnatullin"
         }
     ],
     "repository": [
@@ -21,7 +21,8 @@
         "0.4.0",
         "0.4.1",
         "6.43.0",
-        "7.2.0"
+        "7.2.0",
+        "7.2.0.bcr1"
     ],
     "yanked_versions": {}
 }

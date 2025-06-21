@@ -1,0 +1,20 @@
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -5,7 +5,8 @@
+ )
+ 
+ bazel_dep(name = "rules_shell", version = "0.4.0")
+-bazel_dep(name = "rules_python", version = "0.40.0")
++
++bazel_dep(name = "rules_python", version = "0.30.0")
+ 
+ python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+ python.toolchain(
+@@ -26,7 +27,6 @@
+     whl_name = "dataclasses",
+ )
+ use_repo(pip, "whl_mods_hub")
+-
+ pip.parse(
+     hub_name = "rules_wpiformat_pip",
+     python_version = "3.10",

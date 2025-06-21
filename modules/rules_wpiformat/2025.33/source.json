@@ -3,6 +3,6 @@
     "integrity": "sha256-0npXBq/wNMhPygGPRsdRV1eSou8mfLWpr3DGd7K1LEA=",
     "patch_strip": 0,
     "patches": {
-        "module_dot_bazel.patch": "sha256-pvX49u7iCTQuy0+1FTQzDdQifoa9YsuszTAXU0KkS6E="
+        "module_dot_bazel.patch": "sha256-4ybjpSvxiHmWiqZS96MNrqtGZBCP/XSQ5tuA+xmYSAA="
     }
 }

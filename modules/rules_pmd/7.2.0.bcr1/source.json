@@ -1,8 +1,4 @@
 {
     "url": "https://github.com/bzlmodRio/rules_pmd/releases/download/7.2.0.bcr1/rules_pmd-7.2.0.bcr1.tar.gz",
-    "integrity": "sha256-Z2rqaAN2wy36qyKTli+V93VcFBg4M7PNj2IyP0O3z3U=",
-    "patch_strip": 0,
-    "patches": {
-        "module_dot_bazel.patch": "sha256-BrXOdaSru/idxYSDGbWzHKVS22oVOWPA39GjpNxEgoc="
-    }
+    "integrity": "sha256-Z2rqaAN2wy36qyKTli+V93VcFBg4M7PNj2IyP0O3z3U="
 }

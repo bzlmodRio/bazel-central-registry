@@ -1,0 +1,8 @@
+{
+    "url": "https://github.com/bzlmodRio/rules_wpi_styleguide/releases/download/2025.06.22/rules_wpi_styleguide-2025.06.22.tar.gz",
+    "integrity": "sha256-b4tCi/BzGcJuoRh9ho/CU4wp+vzK13F+AENBGwzWRm8=",
+    "patch_strip": 0,
+    "patches": {
+        "module_dot_bazel.patch": "sha256-R/Qz10Q6WmgdDUnVefin6Vuks/ug5sb60qYMt0v7Ycs="
+    }
+}

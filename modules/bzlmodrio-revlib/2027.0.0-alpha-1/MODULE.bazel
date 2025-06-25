@@ -1,0 +1,58 @@
+module(
+    name = "bzlmodrio-revlib",
+    version = "2027.0.0-alpha-1",
+    compatibility_level = 2027,
+)
+
+bazel_dep(name = "platforms", version = "0.0.9")
+bazel_dep(name = "rules_cc", version = "0.1.1")
+bazel_dep(name = "rules_java", version = "8.11.0")
+bazel_dep(name = "rules_bzlmodrio_toolchains", version = "2025-1.bcr2")
+bazel_dep(name = "rules_bzlmodrio_jdk", version = "17.0.12-7")
+archive_override(
+    module_name = "rules_bzlmodrio_jdk",
+    integrity = "sha256-SrikyrF2v2lENdqn9aFC//d0TkIE620lR60yXTrWFTs=",
+    strip_prefix = "rules_bzlmodrio_jdk-4ecd4cbc97dfbfe2ceefa627de1228e2f2ca5773",
+    urls = ["https://github.com/wpilibsuite/rules_bzlmodRio_jdk/archive/4ecd4cbc97dfbfe2ceefa627de1228e2f2ca5773.tar.gz"],
+)
+
+bazel_dep(name = "bzlmodrio-allwpilib", version = "2027.0.0-alpha-1")
+bazel_dep(name = "bzlmodrio-opencv", version = "2025.4.10.0-3.bcr2")
+bazel_dep(name = "bzlmodrio-ni", version = "2025.2.0.bcr1")
+
+setup_bzlmodrio_revlib_cpp_dependencies = use_extension("//:maven_cpp_deps.bzl", "setup_bzlmodrio_revlib_cpp_dependencies")
+use_repo(
+    setup_bzlmodrio_revlib_cpp_dependencies,
+    "bazelrio_com_revrobotics_frc_revlib-cpp_headers",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxarm32",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxarm32static",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxarm64",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxarm64static",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxsystemcore",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxsystemcorestatic",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxx86-64",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_linuxx86-64static",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_osxuniversal",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_osxuniversalstatic",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_windowsx86-64",
+    "bazelrio_com_revrobotics_frc_revlib-cpp_windowsx86-64static",
+    "bazelrio_com_revrobotics_frc_revlib-driver_headers",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxarm32",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxarm32static",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxarm64",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxarm64static",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxsystemcore",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxsystemcorestatic",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxx86-64",
+    "bazelrio_com_revrobotics_frc_revlib-driver_linuxx86-64static",
+    "bazelrio_com_revrobotics_frc_revlib-driver_osxuniversal",
+    "bazelrio_com_revrobotics_frc_revlib-driver_osxuniversalstatic",
+    "bazelrio_com_revrobotics_frc_revlib-driver_windowsx86-64",
+    "bazelrio_com_revrobotics_frc_revlib-driver_windowsx86-64static",
+)
+
+setup_bzlmodrio_revlib_java_dependencies = use_extension("//:maven_java_deps.bzl", "setup_bzlmodrio_revlib_java_dependencies")
+use_repo(
+    setup_bzlmodrio_revlib_java_dependencies,
+    "com_revrobotics_frc_revlib_java",
+)

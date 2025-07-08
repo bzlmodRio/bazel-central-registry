@@ -2,14 +2,15 @@
     "homepage": "",
     "maintainers": [],
     "repository": [
-        "github:bzlmodRio/bzlmodrio-libssh"
+        "github:wpilibsuite/bzlmodrio-libssh"
     ],
     "versions": [
         "0.95-6",
         "0.95-7",
         "0.95-8",
         "0.105-1",
-        "2024.0.105-1"
+        "2024.0.105-1",
+        "2024.0.105-1.bcr1"
     ],
     "yanked_versions": {}
 }

@@ -116,7 +116,7 @@ def parse_module_versions(registry, check_all, inputs):
 def apply_patch(work_dir, patch_strip, patch_file):
     # Requires patch to be installed
     subprocess.run(
-        ["patch", "-p%d" % patch_strip, "-f", "-l", "-i", patch_file],
+        ["patch", "--strip", str(patch_strip), "--force", "--fuzz", "0", "--ignore-whitespace", "--input", patch_file],
         shell=False,
         check=True,
         env=os.environ,
@@ -236,7 +236,7 @@ def get_github_user_id(github_username):
         user_id = response.json().get("id")
         GITHUB_USER_ID_CACHE[github_username] = user_id
         return user_id
-    return None
+    raise requests.HTTPError(f"unexpected {response.status_code} status code from {url}", response=response)
 
 
 def is_valid_bazel_compatibility_for_overlay(bazel_compatibility):
@@ -305,8 +305,9 @@ class BcrValidator:
 
     def verify_source_archive_url_match_github_repo(self, module_name, version):
         """Verify the source archive URL matches the github repo. For now, we only support github repositories check."""
-        if self.registry.get_source(module_name, version).get("type", None) == "git_repository":
-            source_url = self.registry.get_source(module_name, version)["remote"]
+        source = self.registry.get_source(module_name, version)
+        if source.get("type", None) == "git_repository":
+            source_url = source["remote"]
             # Preprocess the git URL to make the comparison easier.
             if source_url.startswith("git@"):
                 source_url = source_url.removeprefix("git@")
@@ -314,11 +315,14 @@ class BcrValidator:
                 source_url = "https://" + source_netloc + "/" + source_parts
             if source_url.endswith(".git"):
                 source_url = source_url.removesuffix(".git")
-                # The asterisk here is to prevent the final slash from being
-                # dropped by os.path.abspath().
-                source_url = source_url + "/*"
+            # Make the commit look like a GitHub archive to unify the
+            # rest of this check. For non-GitHub repositories, the extra
+            # trailing parts are ignored.
+            commit = source["commit"]
+            source_url = source_url.rstrip("/")
+            source_url = f"{source_url}/archive/{commit}.zip"
         else:
-            source_url = self.registry.get_source(module_name, version)["url"]
+            source_url = source["url"]
         source_repositories = self.registry.get_metadata(module_name).get("repository", [])
         matched = not source_repositories
         for source_repository in source_repositories:
@@ -383,7 +387,7 @@ class BcrValidator:
 
         mirror_urls = source.get("mirror_urls", [])
         for i, mirror_url in enumerate(mirror_urls):
-            urls_to_check.append((mirror_url, f"mirror URL #{i+1}"))
+            urls_to_check.append((mirror_url, f"mirror URL #{i + 1}"))
 
         all_good = True
         for url, description in urls_to_check:
@@ -500,7 +504,21 @@ class BcrValidator:
         tmp_dir = Path(tempfile.mkdtemp())
         archive_file = tmp_dir.joinpath(source_url.split("/")[-1].split("?")[0])
         download_file(source_url, archive_file)
-        shutil.unpack_archive(str(archive_file), output_dir)
+        # Use archive_type from source.json if specified, otherwise let shutil guess from filename
+        # https://bazel.build/rules/lib/repo/http#http_archive-type
+        # https://docs.python.org/3/library/shutil.html#shutil.unpack_archive
+        format = {
+            "tar.gz": "gztar",
+            "tgz": "gztar",
+            "tar.bz2": "bztar",
+            "tar.xz": "xztar",
+            "tar": "tar",
+            "zip": "zip",
+            "jar": "zip",
+            "war": "zip",
+            "aar": "zip",
+        }.get(source.get("archive_type"))
+        shutil.unpack_archive(str(archive_file), output_dir, format=format)
 
     def _download_git_repo(self, source, output_dir):
         run_git("clone", "--depth=1", source["remote"], output_dir)
@@ -564,16 +582,9 @@ class BcrValidator:
                 apply_patch(source_root, source["patch_strip"], str(patch_file.resolve()))
         if "overlay" in source:
             overlay_dir = self.registry.get_overlay_dir(module_name, version)
-            module_file = overlay_dir / "MODULE.bazel"
-            if module_file.exists() and (not module_file.is_symlink() or os.readlink(module_file) != "../MODULE.bazel"):
-                self.report(
-                    BcrValidationResult.FAILED,
-                    f"{module_file} should be a symlink to `../MODULE.bazel`.",
-                )
-
             for overlay_file, expected_integrity in source["overlay"].items():
                 overlay_src = overlay_dir / overlay_file
-                if overlay_src != module_file and overlay_src.is_symlink():
+                if overlay_src.is_symlink():
                     self.report(
                         BcrValidationResult.FAILED,
                         f"The overlay file `{overlay_file}` is a symlink to `{overlay_src.readlink()}`, "
@@ -667,24 +678,35 @@ class BcrValidator:
                     + "This is not allowed, the compatibility level must be monotonically increasing.\n",
                 )
         if index > 0:
-            previous_version = versions[index - 1]
-            previous_module_dot_bazel = self.registry.get_module_dot_bazel_path(module_name, previous_version)
-            previous_compatibility_level = BcrValidator.extract_attribute_from_module(
-                previous_module_dot_bazel, "compatibility_level", 0
-            )
-            if current_compatibility_level < previous_compatibility_level:
-                self.report(
-                    BcrValidationResult.FAILED,
-                    f"The new module version {version} has a lower compatibility level than the previous version {previous_version} ({current_compatibility_level} < {previous_compatibility_level}).\n"
-                    + "This is not allowed, the compatibility level must be monotonically increasing.\n",
+            # Find the most recent non-yanked version before the current one
+            metadata = self.registry.get_metadata(module_name)
+            yanked_versions = metadata.get("yanked_versions", {})
+            previous_version = None
+
+            for i in range(index - 1, -1, -1):
+                candidate_version = versions[i]
+                if candidate_version not in yanked_versions:
+                    previous_version = candidate_version
+                    break
+
+            if previous_version is not None:
+                previous_module_dot_bazel = self.registry.get_module_dot_bazel_path(module_name, previous_version)
+                previous_compatibility_level = BcrValidator.extract_attribute_from_module(
+                    previous_module_dot_bazel, "compatibility_level", 0
                 )
-            if check_compatibility_level and current_compatibility_level != previous_compatibility_level:
-                self.report(
-                    BcrValidationResult.FAILED,
-                    f"The compatibility_level in the new module version ({current_compatibility_level}) doesn't match the previous version ({previous_compatibility_level}).\n"
-                    + "If this is intentional, please comment on your PR `@bazel-io skip_check compatibility_level`\n"
-                    + "Learn more about when to increase the compatibility level at https://bazel.build/external/faq#incrementing-compatibility-level",
-                )
+                if current_compatibility_level < previous_compatibility_level:
+                    self.report(
+                        BcrValidationResult.FAILED,
+                        f"The new module version {version} has a lower compatibility level than the previous version {previous_version} ({current_compatibility_level} < {previous_compatibility_level}).\n"
+                        + "This is not allowed, the compatibility level must be monotonically increasing.\n",
+                    )
+                if check_compatibility_level and current_compatibility_level != previous_compatibility_level:
+                    self.report(
+                        BcrValidationResult.FAILED,
+                        f"The compatibility_level in the new module version ({current_compatibility_level}) doesn't match the previous version ({previous_compatibility_level}).\n"
+                        + "If this is intentional, please comment on your PR `@bazel-io skip_check compatibility_level`\n"
+                        + "Learn more about when to increase the compatibility level at https://bazel.build/external/faq#incrementing-compatibility-level",
+                    )
 
         # Check that bazel_compatability is sufficient when using "overlay"
         if "overlay" in source:
@@ -746,15 +768,15 @@ class BcrValidator:
         if not conflict_found:
             self.report(BcrValidationResult.GOOD, "No module name conflict found.")
 
-    def verify_no_dir_symlinks(self):
-        """Check there is no directory symlink under modules/ dir"""
-        for dirpath, dirnames, _ in os.walk(self.registry.root / "modules"):
-            for dirname in dirnames:
-                full_path = os.path.join(dirpath, dirname)
+    def verify_no_symlinks(self):
+        """Check there is no symlink under modules/ dir"""
+        for dirpath, dirnames, filenames in os.walk(self.registry.root / "modules"):
+            for name in dirnames + filenames:
+                full_path = os.path.join(dirpath, name)
                 if os.path.islink(full_path):
                     self.report(
                         BcrValidationResult.FAILED,
-                        f"Dir symlink is not allowed: {full_path}",
+                        f"Symlink is not allowed: {full_path}",
                     )
 
     def validate_module(self, module_name, version, skipped_validations):
@@ -803,8 +825,7 @@ class BcrValidator:
             if not self.registry.contains(module_name, version):
                 self.report(
                     BcrValidationResult.FAILED,
-                    f"{module_name}@{version} doesn't exist, "
-                    f"but it's recorded in {module_name}'s metadata.json file.",
+                    f"{module_name}@{version} doesn't exist, but it's recorded in {module_name}'s metadata.json file.",
                 )
 
         latest_version = metadata["versions"][-1]
@@ -820,11 +841,12 @@ class BcrValidator:
             if "github" in maintainer:
                 github_username = maintainer["github"]
                 print("checking github user id for %s" % github_username)
-                github_user_id = get_github_user_id(github_username)
-                if github_user_id is None:
+                try:
+                    github_user_id = get_github_user_id(github_username)
+                except Exception as e:
                     raise BcrValidationException(
                         f"Failed to get GitHub user ID for {github_username}. Please check the username."
-                    )
+                    ) from e
                 if github_user_id != maintainer.get("github_user_id"):
                     self.report(
                         BcrValidationResult.FAILED,
@@ -908,7 +930,7 @@ class BcrValidator:
     def global_checks(self):
         """General global checks for BCR"""
         self.verify_module_name_conflict()
-        self.verify_no_dir_symlinks()
+        self.verify_no_symlinks()
 
     def getValidationReturnCode(self):
         # Calculate the overall return code

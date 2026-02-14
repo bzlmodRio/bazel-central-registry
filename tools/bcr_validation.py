@@ -24,6 +24,7 @@ Validations performed are:
   - Verify the source archive URL is stable
   - Verify if the presubmit.yml file matches the previous version
     - If not, we should require BCR maintainer review.
+  - Verify the checked in MODULE.bazel file matches the one in the extracted and patched source tree.
   - Verify attestations (SLSA provenance / VSA) referenced by attestations.json (if it exists).
 """
 
@@ -88,6 +89,11 @@ GITHUB_URL_RE = re.compile(r"^https://github.com/([^/]+/[^/]+)")
 # Global cache for GitHub user IDs
 GITHUB_USER_ID_CACHE = {}
 
+# For the following modules, going from a release with attestations to one without
+# is merely a warning, not a fatal error.
+# TODO(fweikert): enforce compliance once attestation feature is more widely used.
+ATTESTATION_HISTORY_CHECK_OPT_OUT = frozenset(["protobuf"])
+
 
 def print_collapsed_group(name):
     print("\n\n--- {0}\n\n".format(name))
@@ -132,6 +138,10 @@ def run_git(*args):
         check=True,
         env=os.environ,
     )
+
+
+def fix_line_endings(lines):
+    return [line.rstrip() + "\n" for line in lines]
 
 
 def extract_reference(repo_path, path):
@@ -482,6 +492,19 @@ class BcrValidator:
                     "The presubmit.yml file matches the previous version.",
                 )
 
+    def add_module_dot_bazel_patch(self, diff, module_name, version):
+        """Adding a patch file for MODULE.bazel according to the diff result."""
+        source = self.registry.get_source(module_name, version)
+        patch_file = self.registry.get_patch_file_path(module_name, version, "module_dot_bazel.patch")
+        patch_file.parent.mkdir(parents=True, exist_ok=True)
+        open(patch_file, "w").writelines(diff)
+        source["patch_strip"] = int(source.get("patch_strip", 0))
+        patches = source.get("patches", {})
+        patches["module_dot_bazel.patch"] = integrity(read(patch_file))
+        source["patches"] = patches
+        source_json_content = json.dumps(source, indent=4) + "\n"
+        self.registry.get_source_json_path(module_name, version).write_text(source_json_content)
+
     def _download_source_archive(self, source, output_dir):
         source_url = source["url"]
         tmp_dir = Path(tempfile.mkdtemp())
@@ -562,7 +585,7 @@ class BcrValidator:
                         f"The patch file `{patch_name}` is a symlink to `{patch_file.readlink()}`, "
                         "which is not allowed because https://raw.githubusercontent.com/ will not follow it.",
                     )
-                apply_patch(source_root, source["patch_strip"], str(patch_file.resolve()))
+                apply_patch(source_root, int(source.get("patch_strip", 0)), str(patch_file.resolve()))
         if "overlay" in source:
             overlay_dir = self.registry.get_overlay_dir(module_name, version)
             for overlay_file, expected_integrity in source["overlay"].items():
@@ -601,6 +624,36 @@ class BcrValidator:
                 shutil.copy2(overlay_src, overlay_dst)
 
         bcr_module_dot_bazel = self.registry.get_module_dot_bazel_path(module_name, version)
+        source_module_dot_bazel = source_root.joinpath("MODULE.bazel")
+        if source_module_dot_bazel.exists():
+            source_module_dot_bazel_content = open(source_module_dot_bazel, "r").readlines()
+            bcr_module_dot_bazel_content = open(bcr_module_dot_bazel, "r").readlines()
+            source_module_dot_bazel_content = fix_line_endings(source_module_dot_bazel_content)
+            bcr_module_dot_bazel_content = fix_line_endings(bcr_module_dot_bazel_content)
+            file_name = "a/" * int(source.get("patch_strip", 0)) + "MODULE.bazel"
+            diff = list(
+                unified_diff(
+                    source_module_dot_bazel_content,
+                    bcr_module_dot_bazel_content,
+                    fromfile=file_name,
+                    tofile=file_name,
+                )
+            )
+
+            if diff:
+                self.report(
+                    BcrValidationResult.FAILED,
+                    "Checked in MODULE.bazel file doesn't match the one in the extracted and patched sources.\n"
+                    + f"Please fix the MODULE.bazel file or you can add the following patch to {module_name}@{version}:\n"
+                    + "    "
+                    + "    ".join(diff),
+                )
+                if self.should_fix:
+                    self.add_module_dot_bazel_patch(diff, module_name, version)
+            else:
+                self.report(BcrValidationResult.GOOD, "Checked in MODULE.bazel matches the sources.")
+        else:
+            self.report(BcrValidationResult.GOOD, "No MODULE.bazel in the source archive.")
 
         # Check the version in MODULE.bazel matches the version in directory name
         version_in_module_dot_bazel = BcrValidator.extract_attribute_from_module(bcr_module_dot_bazel, "version")
@@ -819,8 +872,13 @@ class BcrValidator:
         attestations_json = self.registry.get_attestations(module_name, version)
         if not attestations_json:
             if head_attestations_json:  # Prevent regressions.
+                verdict = (
+                    BcrValidationResult.NEED_BCR_MAINTAINER_REVIEW
+                    if module_name in ATTESTATION_HISTORY_CHECK_OPT_OUT
+                    else BcrValidationResult.FAILED
+                )
                 self.report(
-                    BcrValidationResult.FAILED,
+                    verdict,
                     f"{module_name}@{version}: No attestations.json file even though "
                     f"{module_name}@{head_snapshot.version} has one.",
                 )

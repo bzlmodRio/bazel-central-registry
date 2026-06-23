@@ -1,0 +1,11 @@
+{
+    "homepage": "https://github.com/wpilibsuite/rules_bzlmodrio_toolchains",
+    "maintainers": [],
+    "repository": [
+        "github:wpilibsuite/rules_bzlmodrio_toolchains"
+    ],
+    "versions": [
+        "2027-1"
+    ],
+    "yanked_versions": {}
+}

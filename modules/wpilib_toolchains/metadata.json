@@ -2,10 +2,12 @@
     "homepage": "https://github.com/wpilibsuite/rules_bzlmodrio_toolchains",
     "maintainers": [],
     "repository": [
-        "github:wpilibsuite/rules_bzlmodrio_toolchains"
+        "github:wpilibsuite/rules_bzlmodrio_toolchains",
+        "github:wpilibsuite/bazel_wpilib_toolchains"
     ],
     "versions": [
-        "2027-1"
+        "2027-1",
+        "2027-1.bcr1"
     ],
     "yanked_versions": {}
 }
